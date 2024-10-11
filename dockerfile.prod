@@ -1,0 +1,35 @@
+ARG NODE_VERSION=22-alpine3.19
+
+#* 1. Base Image Stage
+FROM node:${NODE_VERSION} AS base
+WORKDIR /usr/src/app
+
+#* 2. Installing dependencies Stage
+FROM base AS deps
+
+COPY ./package-lock.json ./
+COPY ./package.json ./
+
+RUN npm install
+
+#* 3. Building Stage
+FROM base AS build
+
+COPY --from=deps ./usr/src/app/node_modules ./node_modules
+COPY . .
+
+RUN npm run build
+RUN npm ci -f --only=production && npm cache clean --force  # Deleting dev dependencies
+
+#* 4. Production Stage
+
+FROM base AS prod
+
+COPY --from=build ./usr/src/app/node_modules ./node_modules
+COPY --from=build ./usr/src/app/dist ./dist
+
+ENV NODE_ENV=production
+USER node
+EXPOSE 3000
+
+CMD [ "node", "dist/main.js" ]
